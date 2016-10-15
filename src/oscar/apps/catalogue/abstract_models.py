@@ -733,6 +733,7 @@ class AbstractProductAttribute(models.Model):
     RICHTEXT = "richtext"
     DATE = "date"
     OPTION = "option"
+    MULTI_OPTION = "multi_option"
     ENTITY = "entity"
     FILE = "file"
     IMAGE = "image"
@@ -744,6 +745,7 @@ class AbstractProductAttribute(models.Model):
         (RICHTEXT, _("Rich Text")),
         (DATE, _("Date")),
         (OPTION, _("Option")),
+        (MULTI_OPTION, _("Multi Option")),
         (ENTITY, _("Entity")),
         (FILE, _("File")),
         (IMAGE, _("Image")),
@@ -769,6 +771,9 @@ class AbstractProductAttribute(models.Model):
     def is_option(self):
         return self.type == self.OPTION
 
+    def is_multi_option(self):
+        return self.type == self.MULTI_OPTION
+
     @property
     def is_file(self):
         return self.type in [self.FILE, self.IMAGE]
@@ -777,6 +782,7 @@ class AbstractProductAttribute(models.Model):
         return self.name
 
     def save_value(self, product, value):
+        print('save_value')
         ProductAttributeValue = get_model('catalogue', 'ProductAttributeValue')
         try:
             value_obj = product.attribute_values.get(attribute=self)
@@ -806,9 +812,25 @@ class AbstractProductAttribute(models.Model):
             if value is None or value == '':
                 value_obj.delete()
                 return
-            if value != value_obj.value:
-                value_obj.value = value
-                value_obj.save()
+            # Value could either be an individual value or
+            # a queryset of values (in case of a multiple choice option attribute)
+            # regardless, we convert all to a list
+            print("whatis ", value_obj)
+            if self.type == 'multi_option':
+                value = set(iter(value))
+                print('v ', value)
+                existing = product.attribute_values.filter(attribute=self)
+                existing.delete()
+
+                for v in value:
+                    model = get_model('catalogue', 'ProductAttributeValue')
+                    attrib_value = model.objects.create(product=product,
+                                                        attribute=self,
+                                                        value=v)
+            else:
+                if value != value_obj.value:
+                    value_obj.value = value
+                    value_obj.save()
 
     def validate_value(self, value):
         validator = getattr(self, '_validate_%s' % self.type)
@@ -858,6 +880,24 @@ class AbstractProductAttribute(models.Model):
                 _("%(enum)s is not a valid choice for %(attr)s") %
                 {'enum': value, 'attr': self})
 
+    def _validate_multi_option(self, value):
+        # this is supposed to be a queryset, we'll just take it on faith that it is
+        # if not isinstance(value, queryset):
+        #    raise ValidationError(
+        #        _("Must be a list of AttributeOption model object instances"))
+        for item in value:
+            if not item.pk:
+                raise ValidationError(_("AttributeOption has not been saved yet"))
+
+        valid_values = self.option_group.options.values_list(
+            'option', flat=True)
+        print(valid_values)
+        for item in value:
+            if item.option not in valid_values:
+                raise ValidationError(
+                    _("%(enum)s is not a valid choice for %(attr)s") %
+                    {'enum': item, 'attr': self})
+
     def _validate_file(self, value):
         if value and not isinstance(value, File):
             raise ValidationError(_("Must be a file field"))
@@ -903,14 +943,22 @@ class AbstractProductAttributeValue(models.Model):
         null=True, blank=True, editable=False)
 
     def _get_value(self):
+        if self.attribute.type == 'multi_option':
+            val = getattr(self, 'value_%s' % 'option')
+            return val
+
         return getattr(self, 'value_%s' % self.attribute.type)
 
     def _set_value(self, new_value):
-        if self.attribute.is_option and isinstance(new_value, six.string_types):
+        if (self.attribute.is_option or self.attribute.is_multi_option) and isinstance(new_value, six.string_types):
             # Need to look up instance of AttributeOption
             new_value = self.attribute.option_group.options.get(
                 option=new_value)
-        setattr(self, 'value_%s' % self.attribute.type, new_value)
+        print(new_value)
+        if self.attribute.is_multi_option:
+            setattr(self, 'value_%s' % 'option', new_value)
+        else:
+            setattr(self, 'value_%s' % self.attribute.type, new_value)
 
     value = property(_get_value, _set_value)
 

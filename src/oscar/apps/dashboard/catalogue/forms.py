@@ -280,6 +280,22 @@ class ProductForm(forms.ModelForm):
             kwargs['initial']['structure'] = Product.CHILD
 
     def set_initial_attribute_values(self, product_class, kwargs):
+        instance = kwargs.get('instance')
+        if instance is None:
+            return
+        if 'initial' not in kwargs:
+            kwargs['initial'] = {}
+        for attribute in product_class.attributes.all():
+            values = kwargs['instance'].attribute_values.filter(
+                attribute=attribute)
+            values = [v.value for v in values]
+            if attribute.type == 'multi_option':
+                kwargs['initial']['attr_%s' % attribute.code] = values
+            else:
+                if values:
+                    kwargs['initial']['attr_%s' % attribute.code] = values[0]
+
+    def set_initial_attribute_values(self, product_class, kwargs):
         """
         Update the kwargs['initial'] value to have the initial values based on
         the product instance's attributes
