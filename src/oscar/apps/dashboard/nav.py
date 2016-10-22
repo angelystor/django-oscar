@@ -17,6 +17,8 @@ class Node(object):
                  access_fn=None, icon=None):
         self.label = label
         self.icon = icon
+        if icon is not None:
+            self.icon = "fa {0}".format(icon)
         self.url_name = url_name
         self.url_args = url_args
         self.url_kwargs = url_kwargs
