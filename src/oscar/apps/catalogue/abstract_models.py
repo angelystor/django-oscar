@@ -771,6 +771,7 @@ class AbstractProductAttribute(models.Model):
     def is_option(self):
         return self.type == self.OPTION
 
+    @property
     def is_multi_option(self):
         return self.type == self.MULTI_OPTION
 
@@ -782,7 +783,6 @@ class AbstractProductAttribute(models.Model):
         return self.name
 
     def save_value(self, product, value):
-        print('save_value')
         ProductAttributeValue = get_model('catalogue', 'ProductAttributeValue')
         try:
             value_obj = product.attribute_values.get(attribute=self)
@@ -815,10 +815,8 @@ class AbstractProductAttribute(models.Model):
             # Value could either be an individual value or
             # a queryset of values (in case of a multiple choice option attribute)
             # regardless, we convert all to a list
-            print("whatis ", value_obj)
             if self.type == 'multi_option':
                 value = set(iter(value))
-                print('v ', value)
                 existing = product.attribute_values.filter(attribute=self)
                 existing.delete()
 
@@ -891,7 +889,6 @@ class AbstractProductAttribute(models.Model):
 
         valid_values = self.option_group.options.values_list(
             'option', flat=True)
-        print(valid_values)
         for item in value:
             if item.option not in valid_values:
                 raise ValidationError(
@@ -954,7 +951,6 @@ class AbstractProductAttributeValue(models.Model):
             # Need to look up instance of AttributeOption
             new_value = self.attribute.option_group.options.get(
                 option=new_value)
-        print(new_value)
         if self.attribute.is_multi_option:
             setattr(self, 'value_%s' % 'option', new_value)
         else:
