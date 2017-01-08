@@ -133,7 +133,7 @@ class BankcardExpiryMonthField(BankcardMonthField):
 
     def clean(self, value):
         expiry_date = super(BankcardExpiryMonthField, self).clean(value)
-        if date.today() > expiry_date:
+        if expiry_date and date.today() > expiry_date:
             raise forms.ValidationError(
                 _("The expiration date you entered is in the past."))
         return expiry_date
@@ -205,7 +205,8 @@ class BankcardCCVField(forms.RegexField):
             'required': True,
             'label': _("CCV number"),
             'widget': forms.TextInput(attrs={'size': '5'}),
-            'error_message': _("Please enter a 3 or 4 digit number"),
+            'error_messages': {
+                'invalid': _("Please enter a 3 or 4 digit number")},
             'help_text': _("This is the 3 or 4 digit security number "
                            "on the back of your bankcard")
         }

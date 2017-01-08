@@ -68,8 +68,13 @@ class AbstractConditionalOffer(models.Model):
     status = models.CharField(_("Status"), max_length=64, default=OPEN)
 
     condition = models.ForeignKey(
-        'offer.Condition', verbose_name=_("Condition"))
-    benefit = models.ForeignKey('offer.Benefit', verbose_name=_("Benefit"))
+        'offer.Condition',
+        on_delete=models.CASCADE,
+        verbose_name=_("Condition"))
+    benefit = models.ForeignKey(
+        'offer.Benefit',
+        on_delete=models.CASCADE,
+        verbose_name=_("Benefit"))
 
     # Some complicated situations require offers to be applied in a set order.
     priority = models.IntegerField(
@@ -384,7 +389,11 @@ class AbstractConditionalOffer(models.Model):
 @python_2_unicode_compatible
 class AbstractBenefit(models.Model):
     range = models.ForeignKey(
-        'offer.Range', null=True, blank=True, verbose_name=_("Range"))
+        'offer.Range',
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+        verbose_name=_("Range"))
 
     # Benefit types
     PERCENTAGE, FIXED, MULTIBUY, FIXED_PRICE = (
@@ -635,7 +644,11 @@ class AbstractCondition(models.Model):
         (COVERAGE, _("Needs to contain a set number of DISTINCT items "
                      "from the condition range")))
     range = models.ForeignKey(
-        'offer.Range', verbose_name=_("Range"), null=True, blank=True)
+        'offer.Range',
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+        verbose_name=_("Range"))
     type = models.CharField(_('Type'), max_length=128, choices=TYPE_CHOICES,
                             blank=True)
     value = fields.PositiveDecimalField(
@@ -840,6 +853,12 @@ class AbstractRange(models.Model):
             relation.display_order = display_order
             relation.save()
 
+        # Remove product from excluded products if it was removed earlier and
+        # re-added again, thus it returns back to the range product list.
+        if product.id in self._excluded_product_ids():
+            self.excluded_products.remove(product)
+            self.invalidate_cached_ids()
+
     def remove_product(self, product):
         """
         Remove product from range. To save on queries, this function does not
@@ -991,8 +1010,8 @@ class AbstractRangeProduct(models.Model):
     Allow ordering products inside ranges
     Exists to allow customising.
     """
-    range = models.ForeignKey('offer.Range')
-    product = models.ForeignKey('catalogue.Product')
+    range = models.ForeignKey('offer.Range', on_delete=models.CASCADE)
+    product = models.ForeignKey('catalogue.Product', on_delete=models.CASCADE)
     display_order = models.IntegerField(default=0)
 
     class Meta:
@@ -1002,12 +1021,17 @@ class AbstractRangeProduct(models.Model):
 
 
 class AbstractRangeProductFileUpload(models.Model):
-    range = models.ForeignKey('offer.Range', related_name='file_uploads',
-                              verbose_name=_("Range"))
+    range = models.ForeignKey(
+        'offer.Range',
+        on_delete=models.CASCADE,
+        related_name='file_uploads',
+        verbose_name=_("Range"))
     filepath = models.CharField(_("File Path"), max_length=255)
     size = models.PositiveIntegerField(_("Size"))
-    uploaded_by = models.ForeignKey(AUTH_USER_MODEL,
-                                    verbose_name=_("Uploaded By"))
+    uploaded_by = models.ForeignKey(
+        AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        verbose_name=_("Uploaded By"))
     date_uploaded = models.DateTimeField(_("Date Uploaded"), auto_now_add=True)
 
     PENDING, FAILED, PROCESSED = 'Pending', 'Failed', 'Processed'
@@ -1072,7 +1096,7 @@ class AbstractRangeProductFileUpload(models.Model):
         existing_ids = existing_skus.union(existing_upcs)
         new_ids = all_ids - existing_ids
 
-        Product = models.get_model('catalogue', 'Product')
+        Product = get_model('catalogue', 'Product')
         products = Product._default_manager.filter(
             models.Q(stockrecords__partner_sku__in=new_ids) |
             models.Q(upc__in=new_ids))
@@ -1089,6 +1113,7 @@ class AbstractRangeProductFileUpload(models.Model):
         dupes = set(all_ids).intersection(existing_ids)
 
         self.mark_as_processed(products.count(), len(missing_ids), len(dupes))
+        return products
 
     def extract_ids(self):
         """
